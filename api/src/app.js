@@ -97,3 +97,11 @@ app.post('/products', async (req, res) => {
 });
 
 module.exports = app;
+
+app.get('/about', (req, res) => {
+  res.json({
+    project: 'TrainShop Starter',
+    module: 'DevOps',
+    objective: 'Créer une CI GitHub Actions'
+  });
+});

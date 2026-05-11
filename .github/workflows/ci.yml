@@ -1,0 +1,39 @@
+name: TrainShop CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+
+  test-api:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm install
+      - run: npm test
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: test-api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build API
+        run: docker build -t trainshop-api ./api
+
+      - name: Build Frontend
+        run: docker build -t trainshop-frontend ./frontend
