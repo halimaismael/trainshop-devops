@@ -25,6 +25,7 @@ jobs:
       - run: npm install
       - run: npm test
 
+
   docker-build:
     runs-on: ubuntu-latest
     needs: test-api
@@ -32,8 +33,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build API
+      # build API
+      - name: Build API image
         run: docker build -t trainshop-api ./api
 
-      - name: Build Frontend
+      # build frontend
+      - name: Build Frontend image
         run: docker build -t trainshop-frontend ./frontend
+
+      # run API container
+      - name: Run API container
+        run: docker run -d -p 3000:3000 --name api trainshop-api
+
+      # wait API
+      - name: Wait API startup
+        run: sleep 5
+
+      # test health
+      - name: Test /health
+        run: curl http://localhost:3000/health
+
+      # cleanup
+      - name: Stop container
+        if: always()
+        run: docker rm -f api
