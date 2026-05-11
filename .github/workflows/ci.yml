@@ -23,37 +23,76 @@ jobs:
           node-version: 20
 
       - run: npm install
-      - run: npm test
 
+      - name: Lint
+        run: npm run lint
 
-  docker-build:
+      - name: Tests
+        run: npm test
+
+  docker-test:
     runs-on: ubuntu-latest
     needs: test-api
 
     steps:
       - uses: actions/checkout@v4
 
-      # build API
-      - name: Build API image
+      - name: Build Docker image
         run: docker build -t trainshop-api ./api
 
-      # build frontend
-      - name: Build Frontend image
-        run: docker build -t trainshop-frontend ./frontend
+      - name: Show Docker images
+        run: docker images
 
-      # run API container
-      - name: Run API container
+      - name: Run container
         run: docker run -d -p 3000:3000 --name api trainshop-api
 
-      # wait API
-      - name: Wait API startup
+      - name: Wait startup
         run: sleep 5
 
-      # test health
       - name: Test /health
-        run: curl http://localhost:3000/health
+        run: curl -f http://localhost:3000/health
 
-      # cleanup
-      - name: Stop container
+      - name: Test /ready
+        run: curl -f http://localhost:3000/ready
+        
+      - name: Test /products
+        run: curl -f http://localhost:3000/products
+
+      - name: Test /metrics
+        run: curl -f http://localhost:3000/metrics
+
+      - name: Show Docker containers
+        if: failure()
+        run: docker ps -a
+
+      - name: Show container logs
+        if: failure()
+        run: docker logs api
+
+      - name: Show /health response
+        if: failure()
+        run: curl http://localhost:3000/health || true
+
+      - name: Show /ready response
+        if: failure()
+        run: curl http://localhost:3000/ready || true
+
+      - name: Show /metrics response
+        if: failure()
+        run: curl http://localhost:3000/metrics || true
+
+      - name: Show metrics
+        run: curl http://localhost:3000/metrics
+
+      - name: Show Docker stats
+        run: docker stats --no-stream
+
+      - name: Show running containers
+        run: docker ps
+
+      - name: Show API logs
+        run: docker logs api
+
+      - name: Cleanup
         if: always()
         run: docker rm -f api

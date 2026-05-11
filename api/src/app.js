@@ -2,10 +2,40 @@ const express = require('express');
 const cors = require('cors');
 const pool = require('./db');
 
+// Ajout Metrics
+
+const {
+  metrics,
+  recordRequest,
+  averageResponseTime,
+  p95ResponseTime
+} = require('./metrics');
+
+
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+//Log des requêtes
+// Logs + métriques des requêtes
+app.use((req, res, next) => {
+  const start = Date.now();
+
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+
+    // métriques
+    recordRequest(res.statusCode, duration);
+
+    // logs
+    console.log(
+      `[REQUEST] ${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`
+    );
+  });
+
+  next();
+});
 
 app.get('/', (req, res) => {
   res.json({
@@ -14,7 +44,8 @@ app.get('/', (req, res) => {
   });
 });
 
-app.get('/health', async (req, res) => {
+//Ancien Health
+/*app.get('/health', async (req, res) => {
   try {
     await pool.query('SELECT 1');
 
@@ -31,14 +62,46 @@ app.get('/health', async (req, res) => {
       message: error.message
     });
   }
-});
+});*/
+app.get('/health', async (req, res) => {
+  const start = Date.now();
 
+  try {
+    await pool.query('SELECT 1');
+
+    res.json({
+      status: 'ok',
+      service: 'trainshop-api',
+      version: '1.0.0',
+      environment: process.env.NODE_ENV || 'local',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      database: 'connected',
+      response_time_ms: Date.now() - start
+    });
+
+  } catch (error) {
+    res.status(503).json({
+      status: 'error',
+      service: 'trainshop-api',
+      version: '1.0.0',
+      environment: process.env.NODE_ENV || 'local',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      database: 'unavailable',
+      error: error.message,
+      response_time_ms: Date.now() - start
+    });
+  }
+});
+console.log(`[HEALTH] check database`);
 app.get('/products', async (req, res) => {
   try {
     const result = await pool.query(
       'SELECT id, name, description, price_cents, stock FROM products ORDER BY id ASC'
     );
 
+    metrics.productsViewed++;
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({
@@ -87,6 +150,7 @@ app.post('/products', async (req, res) => {
       [name, description, price_cents, stock || 0]
     );
 
+    metrics.productsCreated++;
     res.status(201).json(result.rows[0]);
   } catch (error) {
     res.status(500).json({
@@ -96,7 +160,7 @@ app.post('/products', async (req, res) => {
   }
 });
 
-module.exports = app;
+//module.exports = app;
 
 app.get('/about', (req, res) => {
   res.json({
@@ -105,3 +169,58 @@ app.get('/about', (req, res) => {
     objective: 'Créer une CI GitHub Actions'
   });
 });
+
+app.get('/ready', async (req, res) => {
+  try {
+    // Vérifie base de données (dépendance critique)
+    await pool.query('SELECT 1');
+
+    res.json({
+      status: 'ready',
+      service: 'trainshop-api',
+      version: '1.0.0',
+      environment: process.env.NODE_ENV || 'local',
+      database: 'connected',
+      cache: 'not_used',
+      payment_service: 'mock',
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    res.status(503).json({
+      status: 'not_ready',
+      service: 'trainshop-api',
+      version: '1.0.0',
+      database: 'unavailable',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+console.log(`[READY] dependency check started`);
+
+app.get('/metrics', (req, res) => {
+  res.json({
+    service: 'trainshop-api',
+
+    uptime: process.uptime(),
+
+    technical: {
+      total_requests: metrics.requests,
+      errors_4xx: metrics.errors4xx,
+      errors_5xx: metrics.errors5xx,
+      average_response_time_ms: averageResponseTime(),
+      p95_response_time_ms: p95ResponseTime()
+    },
+
+    business: {
+      products_viewed: metrics.productsViewed,
+      products_created: metrics.productsCreated
+    },
+
+    health_status: 'UP',
+
+    timestamp: new Date().toISOString()
+  });
+});
+module.exports = app;
