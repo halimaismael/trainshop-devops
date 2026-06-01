@@ -23,17 +23,17 @@ jobs:
           node-version: 20
 
       - run: npm install
+      - run: npm run lint
+      - run: npm test
 
-      - name: Lint
-        run: npm run lint
-
-      - name: Tests
-        run: npm test
 
   docker-test:
     runs-on: ubuntu-latest
     needs: test-api
 
+    env:
+    CI: true
+    
     steps:
       - uses: actions/checkout@v4
 
@@ -46,53 +46,50 @@ jobs:
       - name: Run container
         run: docker run -d -p 3000:3000 --name api trainshop-api
 
-      - name: Wait startup
-        run: sleep 5
+      - name: Wait for API ready
+        run: |
+          for i in {1..15}; do
+            curl -f http://localhost:3000/health && exit 0
+            echo "waiting API..."
+            sleep 2
+          done
+          exit 1
 
+      # ===== TESTS API =====
       - name: Test /health
         run: curl -f http://localhost:3000/health
 
       - name: Test /ready
         run: curl -f http://localhost:3000/ready
-        
+
       - name: Test /products
         run: curl -f http://localhost:3000/products
 
       - name: Test /metrics
         run: curl -f http://localhost:3000/metrics
 
-      - name: Show Docker containers
+      # ===== DEBUG =====
+      - name: Show containers
         if: failure()
         run: docker ps -a
 
-      - name: Show container logs
+      - name: Show logs
         if: failure()
         run: docker logs api
 
-      - name: Show /health response
+      - name: Debug health
         if: failure()
         run: curl http://localhost:3000/health || true
 
-      - name: Show /ready response
+      - name: Debug ready
         if: failure()
         run: curl http://localhost:3000/ready || true
 
-      - name: Show /metrics response
+      - name: Debug metrics
         if: failure()
         run: curl http://localhost:3000/metrics || true
 
-      - name: Show metrics
-        run: curl http://localhost:3000/metrics
-
-      - name: Show Docker stats
-        run: docker stats --no-stream
-
-      - name: Show running containers
-        run: docker ps
-
-      - name: Show API logs
-        run: docker logs api
-
+      # ===== CLEAN =====
       - name: Cleanup
         if: always()
         run: docker rm -f api
